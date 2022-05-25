@@ -4,26 +4,30 @@ require 'bundler/setup'
 PACKAGE_NAME = "pact"
 VERSION = File.read('VERSION').strip
 TRAVELING_RUBY_VERSION = "20210206-2.4.10"
+JSON_VERSION="2.5.1"
 
-desc "Package pact-ruby-standalone for OSX, Linux x86_64 and Win32 x86_64"
-task :package => ['package:linux:x86_64', 'package:osx', 'package:win32']
+desc "Package pact-ruby-standalone for OSX and Linux x86_64"
+task :package => ['package:linux:x86_64', 'package:osx']
 
 namespace :package do
   namespace :linux do
     desc "Package pact-ruby-standalone for Linux x86_64"
-    task :x86_64 => [:bundle_install, "build/traveling-ruby-#{TRAVELING_RUBY_VERSION}-linux-x86_64.tar.gz"] do
+    task :x86_64 => [
+      :bundle_install,
+      "build/traveling-ruby-#{TRAVELING_RUBY_VERSION}-linux-x86_64.tar.gz",
+      "build/traveling-ruby-#{TRAVELING_RUBY_VERSION}-linux-x86_64-json-#{JSON_VERSION}.tar.gz"
+    ] do
       create_package(TRAVELING_RUBY_VERSION, "linux-x86_64", "linux-x86_64", :unix)
     end
   end
 
   desc "Package pact-ruby-standalone for OS X"
-  task :osx => [:bundle_install, "build/traveling-ruby-#{TRAVELING_RUBY_VERSION}-osx.tar.gz"] do
+  task :osx => [
+    :bundle_install,
+    "build/traveling-ruby-#{TRAVELING_RUBY_VERSION}-osx.tar.gz",
+    "build/traveling-ruby-#{TRAVELING_RUBY_VERSION}-osx-json-#{JSON_VERSION}.tar.gz"
+  ] do
     create_package(TRAVELING_RUBY_VERSION, "osx", "osx", :unix)
-  end
-
-  desc "Package pact-ruby-standalone for Win32 x86_64"
-  task :win32 => [:bundle_install, "build/traveling-ruby-#{TRAVELING_RUBY_VERSION}-win32-86_64.tar.gz"] do
-    create_package(TRAVELING_RUBY_VERSION, "x86_64-win32", "win32", :windows)
   end
 
   desc "Install gems to local directory"
@@ -62,8 +66,12 @@ file "build/traveling-ruby-#{TRAVELING_RUBY_VERSION}-osx.tar.gz" do
   download_runtime(TRAVELING_RUBY_VERSION, "osx")
 end
 
-file "build/traveling-ruby-#{TRAVELING_RUBY_VERSION}-win32-86_64.tar.gz" do
-  download_runtime(TRAVELING_RUBY_VERSION, "x86_64-win32")
+file "build/traveling-ruby-#{TRAVELING_RUBY_VERSION}-linux-x86_64-json-#{JSON_VERSION}.tar.gz" do
+  download_native_extension("linux-x86_64", "json-#{JSON_VERSION}")
+end
+
+file "build/traveling-ruby-#{TRAVELING_RUBY_VERSION}-osx-json-#{JSON_VERSION}.tar.gz" do
+  download_native_extension("osx", "json-#{JSON_VERSION}")
 end
 
 def create_package(version, source_target, package_target, os_type)
@@ -82,21 +90,15 @@ def create_package(version, source_target, package_target, os_type)
   # From https://curl.se/docs/caextract.html
   sh "cp packaging/cacert.pem #{package_dir}/lib/ruby/lib/ca-bundle.crt"
 
-  case os_type
-  when :unix
-    Dir.chdir('packaging'){ Dir['pact*.sh'] }.each do | name |
-      sh "cp packaging/#{name} #{package_dir}/bin/#{name.chomp('.sh')}"
-    end
-  when :windows
-    sh "cp packaging/pact*.bat #{package_dir}/bin"
-  else
-    raise "We don't serve their kind (#{os_type}) here!"
+  Dir.chdir('packaging'){ Dir['pact*.sh'] }.each do | name |
+    sh "cp packaging/#{name} #{package_dir}/bin/#{name.chomp('.sh')}"
   end
 
   sh "cp -pR build/vendor #{package_dir}/lib/"
   sh "cp packaging/Gemfile packaging/Gemfile.lock #{package_dir}/lib/vendor/"
   sh "mkdir #{package_dir}/lib/vendor/.bundle"
   sh "cp packaging/bundler-config #{package_dir}/lib/vendor/.bundle/config"
+  sh "tar -xzf build/traveling-ruby-#{TRAVELING_RUBY_VERSION}-#{source_target}-json-#{JSON_VERSION}.tar.gz -C #{package_dir}/lib/vendor/ruby"
 
   remove_unnecessary_files package_dir
 
@@ -194,4 +196,9 @@ end
 def download_runtime(version, target)
   sh "cd build && curl -L -O --fail " +
     "http://d6r77u77i8pq3.cloudfront.net/releases/traveling-ruby-#{version}-#{target}.tar.gz"
+end
+
+def download_native_extension(target, gem_name_and_version)
+  sh "cd build && curl -L --fail -o traveling-ruby-#{TRAVELING_RUBY_VERSION}-#{target}-#{gem_name_and_version}.tar.gz " +
+    "https://d6r77u77i8pq3.cloudfront.net/releases/traveling-ruby-gems-#{TRAVELING_RUBY_VERSION}-#{target}/#{gem_name_and_version}.tar.gz"
 end
